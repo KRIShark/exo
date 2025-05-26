@@ -28,9 +28,15 @@ from exo.inference.inference_engine import get_inference_engine
 from exo.inference.tokenizers import resolve_tokenizer
 from exo.models import build_base_shard, get_repo
 from exo.viz.topology_viz import TopologyViz
-import uvloop
+try:
+    import uvloop  # type: ignore
+except Exception:  # pragma: no cover - uvloop may not be available on Windows
+    uvloop = None
 import concurrent.futures
-import resource
+try:
+    import resource  # type: ignore
+except Exception:  # pragma: no cover - resource not available on Windows
+    resource = None
 import psutil
 
 # TODO: figure out why this is happening
@@ -40,12 +46,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 # Configure uvloop for maximum performance
 def configure_uvloop():
-    uvloop.install()
+    if uvloop and not psutil.WINDOWS:
+        uvloop.install()
+    elif uvloop is None and os.environ.get("DEBUG", "0") >= "1":
+        print("uvloop is not available; using default asyncio event loop")
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     # Increase file descriptor limits on Unix systems
-    if not psutil.WINDOWS:
+    if not psutil.WINDOWS and resource is not None:
       soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
       try: resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
       except ValueError:
